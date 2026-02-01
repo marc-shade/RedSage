@@ -35,6 +35,7 @@
 - [Citation](#-citation)
 
 ## 📰 News
+- 2026-02-01: Added **llama.cpp + Metal** deployment guide with multi-instance serving, Q4_K_M quantization benchmarks, and [Claude Code Security](https://github.com/marc-shade/claude-code-security) gate integration.
 - 2026-01-26: Our paper has been accepted to ICLR 2026! We will release all the code, models, and datasets gradually. Please stay tuned!
 - 2026-01-14: Added inference, deployment, and evaluation code (except OpenQA).
 - 2025-10-14: Update the README.md
@@ -57,7 +58,9 @@ We are releasing RedSage sequentially in four phases. Track progress here (we’
 - [ ] Publish `RedSage-Qwen3-8B-Seed` on Hugging Face (weights + model card)
 - [x] Provide `inference/hf_chat.py` (Transformers chat example)
 - [x] Provide `inference/vllm_demo.py` (simple client)
+- [x] Provide `inference/llamacpp_demo.py` (llama.cpp client + throughput benchmark)
 - [x] Add **vLLM** serving guide in `docs/deploy/vllm.md`
+- [x] Add **llama.cpp + Metal** serving guide in `docs/deploy/llamacpp.md` (multi-instance, Nginx LB, Apple Silicon)
 
 #### 2) Data
 - [ ] Release **RedSage-CFW** on Hugging Face (datasets + card)
@@ -199,6 +202,30 @@ curl http://localhost:8000/v1/chat/completions \
 * Enable request batching in your gateway (nginx/Envoy) for best throughput.
 
 For a comprehensive deployment guide, refer to [docs/deploy/vllm.md](docs/deploy/vllm.md).
+
+---
+
+### 🍎 Serve with llama.cpp (Apple Silicon / Metal)
+
+For **privacy-first, GPU-only local deployment** on Apple Silicon, use llama.cpp with Metal acceleration and Q4_K_M quantization:
+
+```bash
+# Build llama.cpp with Metal
+git clone https://github.com/ggml-org/llama.cpp && cd llama.cpp
+cmake -B build -DGGML_METAL=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(sysctl -n hw.ncpu)
+
+# Quantize (15GB bf16 -> 4.7GB Q4_K_M)
+./build/bin/llama-quantize RedSage-Qwen3-8B-DPO.gguf RedSage-Q4_K_M.gguf Q4_K_M
+
+# Serve (OpenAI-compatible API)
+./build/bin/llama-server --model RedSage-Q4_K_M.gguf --port 8800 \
+  --n-gpu-layers 999 --flash-attn on --parallel 4 --ctx-size 8192
+```
+
+**Performance on M2 Max (32GB):** ~155 tok/s prompt, ~51 tok/s generation, 16 concurrent slots with 4 instances behind Nginx.
+
+For multi-instance serving with Nginx load balancing and security gate integration, see [docs/deploy/llamacpp.md](docs/deploy/llamacpp.md).
 
 ---
 
